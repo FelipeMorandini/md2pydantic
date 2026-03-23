@@ -1,4 +1,8 @@
-"""Transformer module - converts raw extracted formats into Python dictionaries."""
+"""Transformer module.
+
+Converts raw extracted formats into Python dictionaries and
+(optionally) pandas DataFrames.
+"""
 
 from __future__ import annotations
 

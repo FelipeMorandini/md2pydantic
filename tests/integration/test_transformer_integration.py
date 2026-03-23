@@ -5,11 +5,11 @@ from __future__ import annotations
 import textwrap
 
 from md2pydantic.parser import scan_blocks, scan_tables
-from md2pydantic.transformers import table_to_dicts, table_to_dataframe, tables_to_dicts
+from md2pydantic.transformers import table_to_dataframe, table_to_dicts, tables_to_dicts
 
 
 class TestFullPipelineMarkdownToDicts:
-    """Scenario 1: Parse a realistic LLM response with a table, then convert to dicts."""
+    """Parse a realistic LLM response with a table, then convert to dicts."""
 
     def test_realistic_llm_response(self) -> None:
         md = textwrap.dedent("""\
@@ -183,7 +183,7 @@ class TestPipelineWithPandas:
     """Scenario 6: scan_tables → table_to_dataframe produces correct DataFrame."""
 
     def test_table_to_dataframe(self) -> None:
-        pd = __import__("pytest").importorskip("pandas")
+        __import__("pytest").importorskip("pandas")
 
         md = textwrap.dedent("""\
             | Name  | Age | Score |
@@ -205,7 +205,7 @@ class TestPipelineWithPandas:
         assert df.iloc[1]["Score"] == "87.0"
 
     def test_dataframe_with_empty_cells(self) -> None:
-        pd = __import__("pytest").importorskip("pandas")
+        __import__("pytest").importorskip("pandas")
 
         md = textwrap.dedent("""\
             | X | Y |
