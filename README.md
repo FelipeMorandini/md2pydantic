@@ -1,2 +1,63 @@
 # md2pydantic
-A Python library designed to extract structured data from messy Markdown strings and cast it into Pydantic v2 models.
+
+Extract structured data from messy Markdown strings into [Pydantic v2](https://docs.pydantic.dev/) models.
+
+Built for resilience against common LLM output quirks: triple-backtick wrappers, trailing prose, incomplete tables, malformed JSON, and more.
+
+> **Status:** Early development (pre-alpha). The public API is defined but not yet functional. See [Issues](https://github.com/felipemorandini/md2pydantic/issues) for the roadmap.
+
+## Installation
+
+```bash
+# With uv
+uv add md2pydantic
+
+# With pip
+pip install md2pydantic
+```
+
+Requires Python 3.10+.
+
+## Usage
+
+```python
+from pydantic import BaseModel
+from md2pydantic import MDConverter
+
+class Product(BaseModel):
+    name: str
+    price: float
+    in_stock: bool
+
+markdown = """
+| Name       | Price | In Stock |
+|------------|-------|----------|
+| Widget     | 9.99  | Yes      |
+| Gadget     | 24.50 | No       |
+"""
+
+products = MDConverter(Product).parse_tables(markdown)
+# [Product(name='Widget', price=9.99, in_stock=True),
+#  Product(name='Gadget', price=24.5, in_stock=False)]
+```
+
+## Development
+
+```bash
+# Install with dev dependencies
+uv sync --extra dev
+
+# Run tests
+uv run pytest
+
+# Lint & format
+uv run ruff check .
+uv run ruff format .
+
+# Type check
+uv run mypy src/md2pydantic
+```
+
+## License
+
+MIT
