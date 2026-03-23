@@ -20,15 +20,15 @@ class SampleModel(BaseModel):
 
 
 class TestVersionFormat:
-    """Verify __version__ is a valid semver string."""
+    """Verify __version__ is a valid PEP 440-style version string."""
 
-    def test_version_is_semver(self) -> None:
+    def test_version_is_pep440_compliant(self) -> None:
         from md2pydantic import __version__
 
-        # Semver: MAJOR.MINOR.PATCH with optional pre-release / build metadata
+        # Basic PEP 440-compatible version: MAJOR.MINOR.PATCH with optional suffix
         pattern = r"^\d+\.\d+\.\d+([a-zA-Z0-9.+-]*)$"
         assert re.match(pattern, __version__), (
-            f"__version__ '{__version__}' is not valid semver"
+            f"__version__ '{__version__}' is not a valid PEP 440 version string"
         )
 
     def test_version_matches_pyproject(self) -> None:

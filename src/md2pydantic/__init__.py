@@ -1,8 +1,11 @@
 """md2pydantic - Extract structured data from Markdown into Pydantic v2 models."""
 
-from importlib.metadata import version
+from importlib.metadata import PackageNotFoundError, version
 
-__version__ = version("md2pydantic")
+try:
+    __version__ = version("md2pydantic")
+except PackageNotFoundError:
+    __version__ = "0+unknown"
 
 __all__ = [
     "MDConverter",
