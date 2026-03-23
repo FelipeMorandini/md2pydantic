@@ -33,6 +33,13 @@ _UNCLOSED_FENCED_RE = re.compile(
     re.MULTILINE | re.DOTALL | re.IGNORECASE,
 )
 
+# Generic unclosed fence (any language or none) — used for table exclusion
+_UNCLOSED_FENCE_GENERIC_RE = re.compile(
+    r"^[ ]{0,3}`{3,}[^\n]*\n"
+    r".+",
+    re.MULTILINE | re.DOTALL,
+)
+
 
 def scan_blocks(markdown: str) -> list[CodeBlock]:
     """Extract all candidate structured blocks from a Markdown string.
@@ -298,6 +305,10 @@ def scan_tables(
     fenced_spans: list[tuple[int, int]] = []
     for match in _FENCED_BLOCK_RE.finditer(text):
         fenced_spans.append((match.start(), match.end()))
+    # Also exclude unclosed fenced blocks (common LLM quirk)
+    for match in _UNCLOSED_FENCE_GENERIC_RE.finditer(text):
+        if not _overlaps(match.start(), match.end(), fenced_spans):
+            fenced_spans.append((match.start(), match.end()))
 
     tables = _scan_all_tables(text, fenced_spans)
 
@@ -320,19 +331,21 @@ def _scan_all_tables(
     lines = text.split("\n")
     tables: list[TableBlock] = []
 
-    # Pre-collect headings
-    headings: list[tuple[int, str]] = []  # (line_number, heading_text)
-    for i, line in enumerate(lines):
-        m = _HEADING_RE.match(line.strip())
-        if m:
-            headings.append((i, m.group(1).strip()))
-
     # Pre-compute which lines fall inside fenced code blocks (O(1) lookup)
     fenced_lines: set[int] = set()
     for fs, fe in fenced_spans:
         start_ln = text.count("\n", 0, fs)
         end_ln = text.count("\n", 0, max(fe - 1, 0))
         fenced_lines.update(range(start_ln, end_ln + 1))
+
+    # Pre-collect headings (skip those inside fenced code blocks)
+    headings: list[tuple[int, str]] = []  # (line_number, heading_text)
+    for i, line in enumerate(lines):
+        if i in fenced_lines:
+            continue
+        m = _HEADING_RE.match(line.strip())
+        if m:
+            headings.append((i, m.group(1).strip()))
 
     i = 0
     while i < len(lines) - 1:

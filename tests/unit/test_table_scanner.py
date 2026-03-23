@@ -372,6 +372,26 @@ class TestEdgeCases:
         tables = scan_tables(md)
         assert tables == []
 
+    def test_table_inside_unclosed_fenced_block_not_detected(self) -> None:
+        md = textwrap.dedent("""\
+            ```
+            | Name  | Age |
+            |-------|-----|
+            | Alice | 30  |
+        """)
+        tables = scan_tables(md)
+        assert tables == []
+
+    def test_table_inside_unclosed_json_fenced_block_not_detected(self) -> None:
+        md = textwrap.dedent("""\
+            ```json
+            | Name  | Age |
+            |-------|-----|
+            | Alice | 30  |
+        """)
+        tables = scan_tables(md)
+        assert tables == []
+
     def test_empty_cells(self) -> None:
         md = textwrap.dedent("""\
             | A | B | C |
