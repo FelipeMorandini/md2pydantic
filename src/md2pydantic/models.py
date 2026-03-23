@@ -41,6 +41,17 @@ class TableBlock(BaseModel):
     end_line: int
 
 
+class TransformResult(BaseModel):
+    """Result of transforming a code block into a Python data structure."""
+
+    model_config = ConfigDict(frozen=True)
+
+    data: dict[str, Any] | list[Any] | None
+    error: str | None
+    raw_content: str
+    block_type: BlockType
+
+
 class MDConverter:
     """Main entry point for md2pydantic.
 
