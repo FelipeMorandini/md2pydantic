@@ -104,11 +104,7 @@ class TestMultipleCodeBlocksJsonAndYaml:
 class TestTrailingTextAfterClosingFence:
     """LLM response where trailing text appears after the closing fence."""
 
-    MARKDOWN = (
-        "```json\n"
-        '{"key": "value"}\n'
-        "``` (end of response)\n"
-    )
+    MARKDOWN = '```json\n{"key": "value"}\n``` (end of response)\n'
 
     def test_extracts_one_block(self) -> None:
         blocks = scan_blocks(self.MARKDOWN)
@@ -158,11 +154,7 @@ class TestInlineJsonEmbeddedInProse:
 class TestExtraBackticks:
     """LLM response using four backticks instead of three."""
 
-    MARKDOWN = (
-        "````json\n"
-        '{"tool": "md2pydantic", "version": "0.1.0"}\n'
-        "````\n"
-    )
+    MARKDOWN = '````json\n{"tool": "md2pydantic", "version": "0.1.0"}\n````\n'
 
     def test_extracts_block_with_extra_backticks(self) -> None:
         blocks = scan_blocks(self.MARKDOWN)
@@ -302,12 +294,7 @@ class TestMixedProseAndMultipleJsonBlocks:
 class TestYmlLanguageHint:
     """YAML block using 'yml' hint instead of 'yaml'."""
 
-    MARKDOWN = (
-        "```yml\n"
-        "name: test\n"
-        "version: 1\n"
-        "```\n"
-    )
+    MARKDOWN = "```yml\nname: test\nversion: 1\n```\n"
 
     def test_extracts_yaml_block(self) -> None:
         blocks = scan_blocks(self.MARKDOWN)
@@ -343,11 +330,7 @@ class TestUnfencedJsonArray:
 class TestEmptyCodeBlockSkipped:
     """A fenced block with only whitespace content should be filtered out."""
 
-    MARKDOWN = (
-        "```json\n"
-        "\n"
-        "```\n"
-    )
+    MARKDOWN = "```json\n\n```\n"
 
     def test_empty_block_filtered_out(self) -> None:
         blocks = scan_blocks(self.MARKDOWN)
@@ -357,11 +340,7 @@ class TestEmptyCodeBlockSkipped:
 class TestNonJsonCodeBlockIgnored:
     """Python code block should be ignored by the scanner."""
 
-    MARKDOWN = (
-        "```python\n"
-        "print('hello')\n"
-        "```\n"
-    )
+    MARKDOWN = "```python\nprint('hello')\n```\n"
 
     def test_no_blocks_extracted(self) -> None:
         blocks = scan_blocks(self.MARKDOWN)
@@ -393,14 +372,7 @@ class TestUnclosedFencedBlock:
 class TestLineNumbersAreReasonable:
     """Verify that start_line and end_line reflect document position."""
 
-    MARKDOWN = (
-        "Line zero\n"
-        "Line one\n"
-        "```json\n"
-        '{"a": 1}\n'
-        "```\n"
-        "Line five\n"
-    )
+    MARKDOWN = 'Line zero\nLine one\n```json\n{"a": 1}\n```\nLine five\n'
 
     def test_start_line_after_preamble(self) -> None:
         blocks = scan_blocks(self.MARKDOWN)

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-from md2pydantic.models import BlockType, CodeBlock
+from md2pydantic.models import BlockType, CodeBlock, TableBlock
 
 # --- Language hint mapping ---
 
@@ -31,6 +31,13 @@ _UNCLOSED_FENCED_RE = re.compile(
     r"^[ ]{0,3}(?P<fence>`{3,})[^\S\n]*(?P<lang>json|yaml|yml)[^\S\n]*\n"
     r"(?P<content>.+)",
     re.MULTILINE | re.DOTALL | re.IGNORECASE,
+)
+
+# Generic unclosed fence (any language or none) — used for table exclusion
+_UNCLOSED_FENCE_GENERIC_RE = re.compile(
+    r"^[ ]{0,3}`{3,}[^\n]*\n"
+    r".+",
+    re.MULTILINE | re.DOTALL,
 )
 
 
@@ -70,16 +77,18 @@ def scan_blocks(markdown: str) -> list[CodeBlock]:
         start_line = _line_number_at_offset(text, match.start())
         end_line = _line_number_at_offset(text, match.end() - 1)
 
-        block_pairs.append((
-            match.start(),
-            CodeBlock(
-                content=cleaned,
-                block_type=block_type,
-                fenced=True,
-                start_line=start_line,
-                end_line=end_line,
-            ),
-        ))
+        block_pairs.append(
+            (
+                match.start(),
+                CodeBlock(
+                    content=cleaned,
+                    block_type=block_type,
+                    fenced=True,
+                    start_line=start_line,
+                    end_line=end_line,
+                ),
+            )
+        )
 
     # Phase 1b: Unclosed fenced blocks (fallback)
     for match in _UNCLOSED_FENCED_RE.finditer(text):
@@ -97,16 +106,18 @@ def scan_blocks(markdown: str) -> list[CodeBlock]:
         start_line = _line_number_at_offset(text, match.start())
         end_line = _line_number_at_offset(text, match.end() - 1)
 
-        block_pairs.append((
-            match.start(),
-            CodeBlock(
-                content=cleaned,
-                block_type=block_type,
-                fenced=True,
-                start_line=start_line,
-                end_line=end_line,
-            ),
-        ))
+        block_pairs.append(
+            (
+                match.start(),
+                CodeBlock(
+                    content=cleaned,
+                    block_type=block_type,
+                    fenced=True,
+                    start_line=start_line,
+                    end_line=end_line,
+                ),
+            )
+        )
         claimed_spans.append((match.start(), match.end()))
 
     # Phase 2: Unfenced JSON objects and arrays
@@ -128,16 +139,18 @@ def scan_blocks(markdown: str) -> list[CodeBlock]:
             start_line = _line_number_at_offset(text, start)
             end_line = _line_number_at_offset(text, end - 1)
 
-            block_pairs.append((
-                start,
-                CodeBlock(
-                    content=cleaned,
-                    block_type=block_type,
-                    fenced=False,
-                    start_line=start_line,
-                    end_line=end_line,
-                ),
-            ))
+            block_pairs.append(
+                (
+                    start,
+                    CodeBlock(
+                        content=cleaned,
+                        block_type=block_type,
+                        fenced=False,
+                        start_line=start_line,
+                        end_line=end_line,
+                    ),
+                )
+            )
             claimed_spans.append((start, end))
 
     # Sort by character offset for accurate source-order
@@ -186,9 +199,7 @@ def _overlaps(start: int, end: int, claimed: list[tuple[int, int]]) -> bool:
     return any(start < ce and end > cs for cs, ce in claimed)
 
 
-_JSON_VALUE_START = frozenset(
-    '{["\'-0123456789tfn'
-)
+_JSON_VALUE_START = frozenset("{[\"'-0123456789tfn")
 
 
 def _find_balanced_pairs(
@@ -259,3 +270,207 @@ def _find_closing(text: str, start: int, open_char: str, close_char: str) -> int
             if depth == 0:
                 return i
     return None
+
+
+# --- Table scanning ---
+
+# Separator row: cells of dashes with optional colons for alignment
+_TABLE_SEP_RE = re.compile(r"^[ ]{0,3}\|?(?:[ ]*:?-+:?[ ]*\|)+[ ]*:?-+:?[ ]*\|?[ ]*$")
+
+# Markdown heading
+_HEADING_RE = re.compile(r"^#{1,6}[ \t]+(.+?)[ \t]*#*[ \t]*$")
+
+
+def scan_tables(
+    markdown: str,
+    *,
+    index: int | None = None,
+    heading: str | None = None,
+) -> list[TableBlock]:
+    """Extract Markdown tables from a document.
+
+    Args:
+        markdown: The Markdown text to scan.
+        index: If provided, return only the table at this 0-based index
+            (applied after heading filtering, if any).
+        heading: If provided, return only tables under headings matching
+            this substring (case-insensitive).
+
+    Returns:
+        List of TableBlock instances in document order.
+    """
+    text = markdown.replace("\r\n", "\n").replace("\r", "\n")
+
+    # Get fenced code block spans to exclude tables inside them
+    fenced_spans: list[tuple[int, int]] = []
+    for match in _FENCED_BLOCK_RE.finditer(text):
+        fenced_spans.append((match.start(), match.end()))
+    # Also exclude unclosed fenced blocks (common LLM quirk)
+    for match in _UNCLOSED_FENCE_GENERIC_RE.finditer(text):
+        if not _overlaps(match.start(), match.end(), fenced_spans):
+            fenced_spans.append((match.start(), match.end()))
+
+    tables = _scan_all_tables(text, fenced_spans)
+
+    if heading is not None:
+        heading_lower = heading.lower()
+        tables = [t for t in tables if t.heading and heading_lower in t.heading.lower()]
+
+    if index is not None:
+        if 0 <= index < len(tables):
+            return [tables[index]]
+        return []
+
+    return tables
+
+
+def _scan_all_tables(
+    text: str, fenced_spans: list[tuple[int, int]]
+) -> list[TableBlock]:
+    """Detect all Markdown tables in the text, excluding fenced code blocks."""
+    lines = text.split("\n")
+    tables: list[TableBlock] = []
+
+    # Pre-compute which lines fall inside fenced code blocks (O(1) lookup)
+    fenced_lines: set[int] = set()
+    for fs, fe in fenced_spans:
+        start_ln = text.count("\n", 0, fs)
+        end_ln = text.count("\n", 0, max(fe - 1, 0))
+        fenced_lines.update(range(start_ln, end_ln + 1))
+
+    # Pre-collect headings (skip those inside fenced code blocks)
+    headings: list[tuple[int, str]] = []  # (line_number, heading_text)
+    for i, line in enumerate(lines):
+        if i in fenced_lines:
+            continue
+        m = _HEADING_RE.match(line.strip())
+        if m:
+            headings.append((i, m.group(1).strip()))
+
+    i = 0
+    while i < len(lines) - 1:
+        # Check if this line is inside a fenced code block
+        if i in fenced_lines:
+            i += 1
+            continue
+
+        header_line = lines[i]
+        sep_line = lines[i + 1]
+
+        # Check: is this a header + separator pair?
+        if not _has_pipe(header_line) or not _is_separator_row(sep_line):
+            i += 1
+            continue
+
+        header_cols = _count_columns(header_line)
+        sep_cols = _count_columns(sep_line)
+
+        if header_cols != sep_cols or header_cols == 0:
+            i += 1
+            continue
+
+        # Found a table start. Collect data rows.
+        data_start = i + 2
+        j = data_start
+        while j < len(lines):
+            row = lines[j]
+            if not row.strip():  # Blank line terminates
+                break
+            if not _has_pipe(row):  # No pipe terminates
+                break
+            j += 1
+
+        # Parse the table
+        headers = _parse_table_row(header_line)
+        # Normalize header count
+        headers = headers[:header_cols]
+        while len(headers) < header_cols:
+            headers.append("")
+
+        rows: list[tuple[str, ...]] = []
+        for row_idx in range(data_start, j):
+            cells = _parse_table_row(lines[row_idx])
+            # Pad or truncate to match header count
+            while len(cells) < header_cols:
+                cells.append("")
+            cells = cells[:header_cols]
+            rows.append(tuple(cells))
+
+        # Find preceding heading
+        table_heading = _find_preceding_heading(headings, i)
+
+        tables.append(
+            TableBlock(
+                headers=tuple(headers),
+                rows=tuple(rows),
+                heading=table_heading,
+                start_line=i,
+                end_line=j - 1 if j > data_start else i + 1,
+            )
+        )
+
+        i = j  # Skip past the table
+
+    return tables
+
+
+def _is_separator_row(line: str) -> bool:
+    """Check if a line is a valid Markdown table separator row."""
+    return _TABLE_SEP_RE.match(line.strip()) is not None
+
+
+def _has_pipe(line: str) -> bool:
+    """Check if a line contains an unescaped pipe character."""
+    stripped = line.strip()
+    if not stripped:
+        return False
+    # Check for unescaped pipes
+    i = 0
+    while i < len(stripped):
+        if stripped[i] == "\\" and i + 1 < len(stripped):
+            i += 2  # Skip escaped character
+            continue
+        if stripped[i] == "|":
+            return True
+        i += 1
+    return False
+
+
+def _parse_table_row(line: str) -> list[str]:
+    """Split a pipe-delimited row into stripped cell values.
+
+    Handles escaped pipes (\\|) within cell content.
+    """
+    stripped = line.strip()
+
+    # Replace escaped pipes with a placeholder unlikely to appear in input
+    placeholder = "\x00\x01PIPE\x01\x00"
+    cleaned = stripped.replace("\\|", placeholder)
+
+    # Remove leading/trailing pipes
+    if cleaned.startswith("|"):
+        cleaned = cleaned[1:]
+    if cleaned.endswith("|"):
+        cleaned = cleaned[:-1]
+
+    # Split on pipes and restore escaped pipes
+    cells = [cell.strip().replace(placeholder, "|") for cell in cleaned.split("|")]
+    return cells
+
+
+def _count_columns(line: str) -> int:
+    """Count the number of columns in a pipe-delimited row."""
+    return len(_parse_table_row(line))
+
+
+def _find_preceding_heading(
+    headings: list[tuple[int, str]], table_line: int
+) -> str | None:
+    """Find the nearest heading before a table's start line."""
+    result: str | None = None
+    for line_no, text in headings:
+        if line_no < table_line:
+            result = text
+        else:
+            break
+    return result

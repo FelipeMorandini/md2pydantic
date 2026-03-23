@@ -13,6 +13,7 @@ class BlockType(str, Enum):
 
     JSON = "json"
     YAML = "yaml"
+    TABLE = "table"
     UNKNOWN = "unknown"
 
 
@@ -24,6 +25,18 @@ class CodeBlock(BaseModel):
     content: str
     block_type: BlockType
     fenced: bool
+    start_line: int
+    end_line: int
+
+
+class TableBlock(BaseModel):
+    """A Markdown table extracted from a document."""
+
+    model_config = ConfigDict(frozen=True)
+
+    headers: tuple[str, ...]
+    rows: tuple[tuple[str, ...], ...]
+    heading: str | None
     start_line: int
     end_line: int
 
