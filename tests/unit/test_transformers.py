@@ -406,6 +406,37 @@ class TestJsonBlockToDict:
         assert result.data == [1, 2, 3]
         assert result.error is None
 
+    def test_scalar_null_rejected(self) -> None:
+        block = _make_code_block("null")
+        result = json_block_to_dict(block)
+        assert result.data is None
+        assert result.error is not None
+        assert "scalar" in result.error
+
+    def test_scalar_boolean_rejected(self) -> None:
+        block = _make_code_block("true")
+        result = json_block_to_dict(block)
+        assert result.data is None
+        assert result.error is not None
+
+    def test_scalar_number_rejected(self) -> None:
+        block = _make_code_block("42")
+        result = json_block_to_dict(block)
+        assert result.data is None
+        assert result.error is not None
+
+    def test_scalar_string_rejected(self) -> None:
+        block = _make_code_block('"hello"')
+        result = json_block_to_dict(block)
+        assert result.data is None
+        assert result.error is not None
+
+    def test_comma_inside_string_not_removed(self) -> None:
+        """Trailing comma inside a string value should not be removed."""
+        block = _make_code_block('{"msg": ",}"}')
+        result = json_block_to_dict(block)
+        assert result.data == {"msg": ",}"}
+
 
 # ---------------------------------------------------------------------------
 # yaml_block_to_dict
@@ -563,11 +594,15 @@ class TestRemoveTrailingCommas:
         assert _remove_trailing_commas("[1, 2,]") == "[1, 2]"
 
     def test_trailing_comma_with_whitespace(self) -> None:
-        assert _remove_trailing_commas('{"a": 1,  }') == '{"a": 1}'
+        # Comma removed, whitespace preserved — still valid JSON
+        result = _remove_trailing_commas('{"a": 1,  }')
+        assert json.loads(result) == {"a": 1}
+        assert "," not in result.split("1")[1].split("}")[0]
 
     def test_trailing_comma_with_newline(self) -> None:
-        # The regex \s* matches newlines, so comma+newline+brace collapses
-        assert _remove_trailing_commas('{"a": 1,\n}') == '{"a": 1}'
+        # Comma removed, newline preserved — still valid JSON
+        result = _remove_trailing_commas('{"a": 1,\n}')
+        assert json.loads(result) == {"a": 1}
 
     def test_no_trailing_comma_unchanged(self) -> None:
         original = '{"a": 1}'

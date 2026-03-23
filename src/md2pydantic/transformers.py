@@ -86,6 +86,8 @@ def json_block_to_dict(block: CodeBlock) -> TransformResult:
 
     Applies cleaning heuristics for common LLM output issues:
     trailing commas, single quotes, unquoted keys, truncated JSON.
+    Only dict and list results are accepted; scalar JSON values
+    (strings, numbers, booleans, null) return an error.
     """
     content = block.content
     if not content.strip():
@@ -96,39 +98,49 @@ def json_block_to_dict(block: CodeBlock) -> TransformResult:
             block_type=block.block_type,
         )
 
-    # Phase 1: Try parsing as-is
-    try:
-        data = json.loads(content)
-        return TransformResult(
-            data=data, error=None, raw_content=content, block_type=block.block_type
-        )
-    except json.JSONDecodeError:
-        pass
-
-    # Phase 2: Clean common syntax issues and retry
-    cleaned = _fix_json(content)
-    try:
-        data = json.loads(cleaned)
-        return TransformResult(
-            data=data, error=None, raw_content=content, block_type=block.block_type
-        )
-    except json.JSONDecodeError:
-        pass
-
-    # Phase 3: Attempt half-JSON recovery
-    recovered = _recover_truncated_json(cleaned)
-    try:
-        data = json.loads(recovered)
-        return TransformResult(
-            data=data, error=None, raw_content=content, block_type=block.block_type
-        )
-    except json.JSONDecodeError as e:
+    def _try_parse(text: str) -> TransformResult | None:
+        try:
+            data = json.loads(text)
+        except json.JSONDecodeError:
+            return None
+        if isinstance(data, (dict, list)):
+            return TransformResult(
+                data=data,
+                error=None,
+                raw_content=content,
+                block_type=block.block_type,
+            )
         return TransformResult(
             data=None,
-            error=f"JSON parse failed after recovery: {e}",
+            error=f"JSON parsed to scalar type ({type(data).__name__}),"
+            " expected dict or list",
             raw_content=content,
             block_type=block.block_type,
         )
+
+    # Phase 1: Try parsing as-is
+    result = _try_parse(content)
+    if result is not None:
+        return result
+
+    # Phase 2: Clean common syntax issues and retry
+    cleaned = _fix_json(content)
+    result = _try_parse(cleaned)
+    if result is not None:
+        return result
+
+    # Phase 3: Attempt half-JSON recovery
+    recovered = _recover_truncated_json(cleaned)
+    result = _try_parse(recovered)
+    if result is not None:
+        return result
+
+    return TransformResult(
+        data=None,
+        error="JSON parse failed after recovery",
+        raw_content=content,
+        block_type=block.block_type,
+    )
 
 
 def yaml_block_to_dict(block: CodeBlock) -> TransformResult:
@@ -223,8 +235,53 @@ def _fix_json(content: str) -> str:
 
 
 def _remove_trailing_commas(content: str) -> str:
-    """Remove trailing commas before closing braces/brackets."""
-    return re.sub(r",\s*([}\]])", r"\1", content)
+    """Remove trailing commas before closing braces/brackets.
+
+    String-aware: only removes commas outside quoted strings.
+    """
+    chars = list(content)
+    result_chars: list[str] = []
+    in_string = False
+    escape = False
+    i = 0
+    length = len(chars)
+
+    while i < length:
+        ch = chars[i]
+
+        if escape:
+            result_chars.append(ch)
+            escape = False
+            i += 1
+            continue
+
+        if ch == "\\":
+            result_chars.append(ch)
+            if in_string:
+                escape = True
+            i += 1
+            continue
+
+        if ch == '"':
+            in_string = not in_string
+            result_chars.append(ch)
+            i += 1
+            continue
+
+        if not in_string and ch == ",":
+            # Look ahead: is the next non-whitespace a } or ]?
+            j = i + 1
+            while j < length and chars[j] in (" ", "\t", "\n", "\r"):
+                j += 1
+            if j < length and chars[j] in ("}", "]"):
+                # Skip this trailing comma
+                i += 1
+                continue
+
+        result_chars.append(ch)
+        i += 1
+
+    return "".join(result_chars)
 
 
 def _single_to_double_quotes(content: str) -> str:
