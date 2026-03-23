@@ -90,13 +90,13 @@ class TestMixedCaseHints:
 
     @pytest.mark.parametrize("hint", ["JSON", "Json", "jSoN"])
     def test_json_mixed_case(self, hint: str) -> None:
-        md = f"```{hint}\n" '{"key": "value"}\n' "```\n"
+        md = f'```{hint}\n{{"key": "value"}}\n```\n'
         block = _single(scan_blocks(md))
         assert block.block_type == BlockType.JSON
 
     @pytest.mark.parametrize("hint", ["YAML", "Yaml", "YML", "Yml"])
     def test_yaml_mixed_case(self, hint: str) -> None:
-        md = f"```{hint}\n" "name: test\n" "```\n"
+        md = f"```{hint}\nname: test\n```\n"
         block = _single(scan_blocks(md))
         assert block.block_type == BlockType.YAML
 
@@ -105,12 +105,12 @@ class TestExtraBackticks:
     """Fences with more than three backticks."""
 
     def test_four_backticks(self) -> None:
-        md = "````json\n" '{"a": 1}\n' "````\n"
+        md = '````json\n{"a": 1}\n````\n'
         block = _single(scan_blocks(md))
         assert block.block_type == BlockType.JSON
 
     def test_five_backticks(self) -> None:
-        md = "`````json\n" '{"a": 1}\n' "`````\n"
+        md = '`````json\n{"a": 1}\n`````\n'
         block = _single(scan_blocks(md))
         assert block.block_type == BlockType.JSON
 
@@ -134,12 +134,12 @@ class TestLeadingTrailingBlankLines:
     """Blank lines inside a fenced block should be stripped from content."""
 
     def test_leading_blank_lines_stripped(self) -> None:
-        md = "```json\n\n\n" '{"a": 1}\n' "```\n"
+        md = '```json\n\n\n{"a": 1}\n```\n'
         block = _single(scan_blocks(md))
         assert block.content.startswith("{")
 
     def test_trailing_blank_lines_stripped(self) -> None:
-        md = "```json\n" '{"a": 1}\n\n\n' "```\n"
+        md = '```json\n{"a": 1}\n\n\n```\n'
         block = _single(scan_blocks(md))
         assert block.content.endswith("}")
 
@@ -189,13 +189,13 @@ class TestFencedNoHintInference:
     """Fenced blocks with no language hint — type should be inferred."""
 
     def test_infer_json_from_content(self) -> None:
-        md = "```\n" '{"inferred": true}\n' "```\n"
+        md = '```\n{"inferred": true}\n```\n'
         block = _single(scan_blocks(md))
         assert block.block_type == BlockType.JSON
         assert block.fenced is True
 
     def test_infer_yaml_from_content(self) -> None:
-        md = "```\n" "name: inferred\n" "status: ok\n" "```\n"
+        md = "```\nname: inferred\nstatus: ok\n```\n"
         block = _single(scan_blocks(md))
         assert block.block_type == BlockType.YAML
         assert block.fenced is True
@@ -261,7 +261,7 @@ class TestLlmQuirks:
         assert "explanation" not in block.content
 
     def test_extra_backticks_on_fences(self) -> None:
-        md = "````json\n" '{"key": "value"}\n' "````\n"
+        md = '````json\n{"key": "value"}\n````\n'
         block = _single(scan_blocks(md))
         assert block.block_type == BlockType.JSON
 
@@ -372,7 +372,7 @@ class TestEdgeCases:
     """Edge conditions: line endings, ignored languages, empty input."""
 
     def test_windows_line_endings(self) -> None:
-        md = "```json\r\n{\"key\": \"value\"}\r\n```\r\n"
+        md = '```json\r\n{"key": "value"}\r\n```\r\n'
         block = _single(scan_blocks(md))
         assert block.block_type == BlockType.JSON
         assert '"key": "value"' in block.content
@@ -388,7 +388,7 @@ class TestEdgeCases:
 
     @pytest.mark.parametrize("lang", ["python", "go", "rust", "bash", "sql", "html"])
     def test_non_json_yaml_language_ignored(self, lang: str) -> None:
-        md = f"```{lang}\n" "some code\n" "```\n"
+        md = f"```{lang}\nsome code\n```\n"
         blocks = scan_blocks(md)
         assert len(blocks) == 0
 
@@ -426,12 +426,12 @@ class TestEdgeCases:
 
     def test_indented_fenced_block(self) -> None:
         """CommonMark allows up to 3 spaces of indentation before fences."""
-        md = "   ```json\n   {\"key\": \"value\"}\n   ```\n"
+        md = '   ```json\n   {"key": "value"}\n   ```\n'
         block = _single(scan_blocks(md))
         assert block.block_type == BlockType.JSON
 
     def test_space_between_fence_and_hint(self) -> None:
         """Space between backticks and language hint should be accepted."""
-        md = "``` json\n{\"key\": \"value\"}\n```\n"
+        md = '``` json\n{"key": "value"}\n```\n'
         block = _single(scan_blocks(md))
         assert block.block_type == BlockType.JSON
