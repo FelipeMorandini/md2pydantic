@@ -233,10 +233,8 @@ class TestLargeTableManyRows:
         ("Leo", "26", "Tester"),
     )
 
-    MARKDOWN = (
-        "| Name | Age | Role |\n"
-        "|---|---|---|\n"
-        + "".join(f"| {name} | {age} | {role} |\n" for name, age, role in ROWS)
+    MARKDOWN = "| Name | Age | Role |\n|---|---|---|\n" + "".join(
+        f"| {name} | {age} | {role} |\n" for name, age, role in ROWS
     )
 
     def test_extracts_single_table(self) -> None:
@@ -264,12 +262,7 @@ class TestLargeTableManyRows:
 class TestTableImmediatelyAfterHeading:
     """Table immediately following a heading with no blank line in between."""
 
-    MARKDOWN = (
-        "## Results\n"
-        "| col1 | col2 |\n"
-        "|---|---|\n"
-        "| a | b |\n"
-    )
+    MARKDOWN = "## Results\n| col1 | col2 |\n|---|---|\n| a | b |\n"
 
     def test_extracts_single_table(self) -> None:
         tables = scan_tables(self.MARKDOWN)
@@ -320,15 +313,7 @@ class TestTableInsideFencedCodeBlockExcluded:
 class TestIndexParameter:
     """Verify the index parameter selects the correct table."""
 
-    MARKDOWN = (
-        "| A | B |\n"
-        "|---|---|\n"
-        "| 1 | 2 |\n"
-        "\n"
-        "| C | D |\n"
-        "|---|---|\n"
-        "| 3 | 4 |\n"
-    )
+    MARKDOWN = "| A | B |\n|---|---|\n| 1 | 2 |\n\n| C | D |\n|---|---|\n| 3 | 4 |\n"
 
     def test_index_zero_returns_first_table(self) -> None:
         tables = scan_tables(self.MARKDOWN, index=0)
