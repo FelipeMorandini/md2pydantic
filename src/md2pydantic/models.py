@@ -2,7 +2,30 @@
 
 from __future__ import annotations
 
+from enum import Enum
 from typing import Any
+
+from pydantic import BaseModel, ConfigDict
+
+
+class BlockType(str, Enum):
+    """Type of structured block detected in Markdown."""
+
+    JSON = "json"
+    YAML = "yaml"
+    UNKNOWN = "unknown"
+
+
+class CodeBlock(BaseModel):
+    """A candidate structured block extracted from Markdown."""
+
+    model_config = ConfigDict(frozen=True)
+
+    content: str
+    block_type: BlockType
+    fenced: bool
+    start_line: int
+    end_line: int
 
 
 class MDConverter:
