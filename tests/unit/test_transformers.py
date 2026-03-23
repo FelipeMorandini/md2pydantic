@@ -1,14 +1,30 @@
-"""Unit tests for the transformer module (transformers.py) — Issue #4.
+"""Unit tests for the transformer module (transformers.py) — Issues #4 and #5.
 
-Covers table_to_dicts, tables_to_dicts, and table_to_dataframe.
+Covers table_to_dicts, tables_to_dicts, table_to_dataframe,
+json_block_to_dict, yaml_block_to_dict, block_to_dict, blocks_to_dicts,
+and private JSON cleaning helpers.
 """
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
-from md2pydantic.models import TableBlock
-from md2pydantic.transformers import table_to_dataframe, table_to_dicts, tables_to_dicts
+from md2pydantic.models import BlockType, CodeBlock, TableBlock, TransformResult
+from md2pydantic.transformers import (
+    _quote_unquoted_keys,
+    _recover_truncated_json,
+    _remove_trailing_commas,
+    _single_to_double_quotes,
+    block_to_dict,
+    blocks_to_dicts,
+    json_block_to_dict,
+    table_to_dataframe,
+    table_to_dicts,
+    tables_to_dicts,
+    yaml_block_to_dict,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -273,3 +289,475 @@ class TestScannerGuaranteesEqualLengths:
         result = table_to_dicts(tables[0])
         assert len(result) == 1
         assert set(result[0].keys()) == {"A", "B", "C"}
+
+
+# ---------------------------------------------------------------------------
+# Helpers for JSON/YAML tests
+# ---------------------------------------------------------------------------
+
+
+def _make_code_block(
+    content: str,
+    block_type: BlockType = BlockType.JSON,
+    *,
+    fenced: bool = True,
+    start_line: int = 0,
+    end_line: int = 0,
+) -> CodeBlock:
+    """Build a CodeBlock for testing."""
+    return CodeBlock(
+        content=content,
+        block_type=block_type,
+        fenced=fenced,
+        start_line=start_line,
+        end_line=end_line,
+    )
+
+
+# ---------------------------------------------------------------------------
+# json_block_to_dict
+# ---------------------------------------------------------------------------
+
+
+class TestJsonBlockToDict:
+    """Tests for json_block_to_dict."""
+
+    def test_well_formed_object(self) -> None:
+        block = _make_code_block('{"name": "Alice", "age": 30}')
+        result = json_block_to_dict(block)
+        assert result.data == {"name": "Alice", "age": 30}
+        assert result.error is None
+
+    def test_well_formed_array(self) -> None:
+        block = _make_code_block('[{"a": 1}, {"a": 2}]')
+        result = json_block_to_dict(block)
+        assert result.data == [{"a": 1}, {"a": 2}]
+        assert result.error is None
+
+    def test_trailing_commas(self) -> None:
+        block = _make_code_block('{"a": 1, "b": 2,}')
+        result = json_block_to_dict(block)
+        assert result.data == {"a": 1, "b": 2}
+        assert result.error is None
+
+    def test_single_quotes(self) -> None:
+        block = _make_code_block("{'key': 'value'}")
+        result = json_block_to_dict(block)
+        assert result.data == {"key": "value"}
+        assert result.error is None
+
+    def test_unquoted_keys(self) -> None:
+        block = _make_code_block('{name: "Alice", age: 30}')
+        result = json_block_to_dict(block)
+        assert result.data == {"name": "Alice", "age": 30}
+        assert result.error is None
+
+    def test_mixed_issues(self) -> None:
+        block = _make_code_block("{name: 'Alice', age: 30,}")
+        result = json_block_to_dict(block)
+        assert result.data == {"name": "Alice", "age": 30}
+        assert result.error is None
+
+    def test_truncated_json_simple(self) -> None:
+        block = _make_code_block('{"name": "Alice", "age": 30')
+        result = json_block_to_dict(block)
+        assert result.data == {"name": "Alice", "age": 30}
+        assert result.error is None
+
+    def test_truncated_nested(self) -> None:
+        block = _make_code_block('{"users": [{"name": "Alice"')
+        result = json_block_to_dict(block)
+        assert result.data == {"users": [{"name": "Alice"}]}
+        assert result.error is None
+
+    def test_empty_content(self) -> None:
+        block = _make_code_block("")
+        result = json_block_to_dict(block)
+        assert result.data is None
+        assert result.error == "Empty content"
+
+    def test_whitespace_only_content(self) -> None:
+        block = _make_code_block("   \n  \t  ")
+        result = json_block_to_dict(block)
+        assert result.data is None
+        assert result.error == "Empty content"
+
+    def test_completely_unparseable(self) -> None:
+        block = _make_code_block("this is not json at all !!!")
+        result = json_block_to_dict(block)
+        assert result.data is None
+        assert result.error is not None
+        assert "JSON parse failed" in result.error
+
+    def test_raw_content_preserved(self) -> None:
+        raw = '{"a": 1, "b": 2,}'
+        block = _make_code_block(raw)
+        result = json_block_to_dict(block)
+        assert result.raw_content == raw
+
+    def test_block_type_preserved(self) -> None:
+        block = _make_code_block('{"a": 1}', BlockType.JSON)
+        result = json_block_to_dict(block)
+        assert result.block_type == BlockType.JSON
+
+    def test_trailing_comma_in_array(self) -> None:
+        block = _make_code_block('[1, 2, 3,]')
+        result = json_block_to_dict(block)
+        assert result.data == [1, 2, 3]
+        assert result.error is None
+
+    def test_scalar_null_rejected(self) -> None:
+        block = _make_code_block("null")
+        result = json_block_to_dict(block)
+        assert result.data is None
+        assert result.error is not None
+        assert "scalar" in result.error
+
+    def test_scalar_boolean_rejected(self) -> None:
+        block = _make_code_block("true")
+        result = json_block_to_dict(block)
+        assert result.data is None
+        assert result.error is not None
+
+    def test_scalar_number_rejected(self) -> None:
+        block = _make_code_block("42")
+        result = json_block_to_dict(block)
+        assert result.data is None
+        assert result.error is not None
+
+    def test_scalar_string_rejected(self) -> None:
+        block = _make_code_block('"hello"')
+        result = json_block_to_dict(block)
+        assert result.data is None
+        assert result.error is not None
+
+    def test_comma_inside_string_not_removed(self) -> None:
+        """Trailing comma inside a string value should not be removed."""
+        block = _make_code_block('{"msg": ",}"}')
+        result = json_block_to_dict(block)
+        assert result.data == {"msg": ",}"}
+
+
+# ---------------------------------------------------------------------------
+# yaml_block_to_dict
+# ---------------------------------------------------------------------------
+
+
+class TestYamlBlockToDict:
+    """Tests for yaml_block_to_dict."""
+
+    @pytest.fixture(autouse=True)
+    def _skip_without_pyyaml(self) -> None:
+        pytest.importorskip("yaml")
+
+    def test_simple_key_value(self) -> None:
+        block = _make_code_block("name: Alice\nage: 30\n", BlockType.YAML)
+        result = yaml_block_to_dict(block)
+        assert result.data == {"name": "Alice", "age": 30}
+        assert result.error is None
+
+    def test_nested_yaml(self) -> None:
+        content = "user:\n  name: Alice\n  address:\n    city: NY\n"
+        block = _make_code_block(content, BlockType.YAML)
+        result = yaml_block_to_dict(block)
+        assert result.data == {"user": {"name": "Alice", "address": {"city": "NY"}}}
+        assert result.error is None
+
+    def test_yaml_list(self) -> None:
+        content = "- Alice\n- Bob\n- Charlie\n"
+        block = _make_code_block(content, BlockType.YAML)
+        result = yaml_block_to_dict(block)
+        assert result.data == ["Alice", "Bob", "Charlie"]
+        assert result.error is None
+
+    def test_yaml_scalar_returns_error(self) -> None:
+        block = _make_code_block("just a string", BlockType.YAML)
+        result = yaml_block_to_dict(block)
+        assert result.data is None
+        assert result.error is not None
+        assert "scalar" in result.error
+
+    def test_invalid_yaml(self) -> None:
+        content = ":\n  - :\n    - : : :\n  {{{"
+        block = _make_code_block(content, BlockType.YAML)
+        result = yaml_block_to_dict(block)
+        assert result.data is None
+        assert result.error is not None
+
+    def test_empty_content(self) -> None:
+        block = _make_code_block("", BlockType.YAML)
+        result = yaml_block_to_dict(block)
+        assert result.data is None
+        assert result.error == "Empty content"
+
+    def test_block_type_preserved(self) -> None:
+        block = _make_code_block("key: val\n", BlockType.YAML)
+        result = yaml_block_to_dict(block)
+        assert result.block_type == BlockType.YAML
+
+    def test_raw_content_preserved(self) -> None:
+        raw = "key: val\n"
+        block = _make_code_block(raw, BlockType.YAML)
+        result = yaml_block_to_dict(block)
+        assert result.raw_content == raw
+
+
+# ---------------------------------------------------------------------------
+# block_to_dict
+# ---------------------------------------------------------------------------
+
+
+class TestBlockToDict:
+    """Tests for block_to_dict dispatch logic."""
+
+    @pytest.fixture(autouse=True)
+    def _skip_without_pyyaml(self) -> None:
+        pytest.importorskip("yaml")
+
+    def test_json_block_dispatches_to_json(self) -> None:
+        block = _make_code_block('{"x": 1}', BlockType.JSON)
+        result = block_to_dict(block)
+        assert result.data == {"x": 1}
+        assert result.error is None
+
+    def test_yaml_block_dispatches_to_yaml(self) -> None:
+        block = _make_code_block("x: 1\n", BlockType.YAML)
+        result = block_to_dict(block)
+        assert result.data == {"x": 1}
+        assert result.error is None
+
+    def test_unknown_block_tries_json_first(self) -> None:
+        block = _make_code_block('{"x": 1}', BlockType.UNKNOWN)
+        result = block_to_dict(block)
+        assert result.data == {"x": 1}
+        assert result.error is None
+
+    def test_unknown_block_falls_back_to_yaml(self) -> None:
+        block = _make_code_block("x: 1\ny: 2\n", BlockType.UNKNOWN)
+        result = block_to_dict(block)
+        assert result.data == {"x": 1, "y": 2}
+        assert result.error is None
+
+
+# ---------------------------------------------------------------------------
+# blocks_to_dicts
+# ---------------------------------------------------------------------------
+
+
+class TestBlocksToDicts:
+    """Tests for blocks_to_dicts."""
+
+    def test_multiple_blocks(self) -> None:
+        blocks = [
+            _make_code_block('{"a": 1}', BlockType.JSON),
+            _make_code_block('{"b": 2}', BlockType.JSON),
+        ]
+        results = blocks_to_dicts(blocks)
+        assert len(results) == 2
+        assert results[0].data == {"a": 1}
+        assert results[1].data == {"b": 2}
+
+    def test_empty_list(self) -> None:
+        results = blocks_to_dicts([])
+        assert results == []
+
+    def test_mixed_success_and_failure(self) -> None:
+        blocks = [
+            _make_code_block('{"a": 1}', BlockType.JSON),
+            _make_code_block("not json", BlockType.JSON),
+        ]
+        results = blocks_to_dicts(blocks)
+        assert len(results) == 2
+        assert results[0].data == {"a": 1}
+        assert results[0].error is None
+        assert results[1].data is None
+        assert results[1].error is not None
+
+    def test_returns_transform_result_instances(self) -> None:
+        blocks = [_make_code_block('{"a": 1}', BlockType.JSON)]
+        results = blocks_to_dicts(blocks)
+        assert isinstance(results[0], TransformResult)
+
+
+# ---------------------------------------------------------------------------
+# Private helpers: _remove_trailing_commas
+# ---------------------------------------------------------------------------
+
+
+class TestRemoveTrailingCommas:
+    """Tests for _remove_trailing_commas."""
+
+    def test_trailing_comma_before_brace(self) -> None:
+        assert _remove_trailing_commas('{"a": 1,}') == '{"a": 1}'
+
+    def test_trailing_comma_before_bracket(self) -> None:
+        assert _remove_trailing_commas("[1, 2,]") == "[1, 2]"
+
+    def test_trailing_comma_with_whitespace(self) -> None:
+        # Comma removed, whitespace preserved — still valid JSON
+        result = _remove_trailing_commas('{"a": 1,  }')
+        assert json.loads(result) == {"a": 1}
+        assert "," not in result.split("1")[1].split("}")[0]
+
+    def test_trailing_comma_with_newline(self) -> None:
+        # Comma removed, newline preserved — still valid JSON
+        result = _remove_trailing_commas('{"a": 1,\n}')
+        assert json.loads(result) == {"a": 1}
+
+    def test_no_trailing_comma_unchanged(self) -> None:
+        original = '{"a": 1}'
+        assert _remove_trailing_commas(original) == original
+
+    def test_multiple_trailing_commas(self) -> None:
+        result = _remove_trailing_commas('{"a": [1, 2,], "b": 3,}')
+        assert result == '{"a": [1, 2], "b": 3}'
+
+    def test_empty_string(self) -> None:
+        assert _remove_trailing_commas("") == ""
+
+
+# ---------------------------------------------------------------------------
+# Private helpers: _single_to_double_quotes
+# ---------------------------------------------------------------------------
+
+
+class TestSingleToDoubleQuotes:
+    """Tests for _single_to_double_quotes."""
+
+    def test_basic_replacement(self) -> None:
+        assert _single_to_double_quotes("{'a': 'b'}") == '{"a": "b"}'
+
+    def test_already_double_quotes_unchanged(self) -> None:
+        original = '{"a": "b"}'
+        assert _single_to_double_quotes(original) == original
+
+    def test_mixed_quotes(self) -> None:
+        result = _single_to_double_quotes("""{'a': "b"}""")
+        assert result == '{"a": "b"}'
+
+    def test_empty_string(self) -> None:
+        assert _single_to_double_quotes("") == ""
+
+    def test_escaped_backslash_in_string(self) -> None:
+        result = _single_to_double_quotes("{'a': 'b\\\\'}")
+        # The escaped backslash should not affect quote handling
+        assert '"a"' in result
+
+    def test_nested_single_quotes(self) -> None:
+        result = _single_to_double_quotes("{'key': 'value'}")
+        assert result == '{"key": "value"}'
+
+    def test_escaped_apostrophe_produces_valid_json(self) -> None:
+        """Escaped apostrophe \\' in single-quoted string should become valid."""
+        result = _single_to_double_quotes("{'key': 'it\\'s a test'}")
+        # Should produce valid JSON (\\' replaced with just ')
+        parsed = json.loads(result)
+        assert parsed == {"key": "it's a test"}
+
+
+# ---------------------------------------------------------------------------
+# Private helpers: _quote_unquoted_keys
+# ---------------------------------------------------------------------------
+
+
+class TestQuoteUnquotedKeys:
+    """Tests for _quote_unquoted_keys."""
+
+    def test_basic_unquoted_key(self) -> None:
+        result = _quote_unquoted_keys('{name: "Alice"}')
+        assert '"name":' in result
+
+    def test_multiple_unquoted_keys(self) -> None:
+        result = _quote_unquoted_keys('{name: "Alice", age: 30}')
+        assert '"name":' in result
+        assert '"age":' in result
+
+    def test_already_quoted_keys_unchanged(self) -> None:
+        original = '{"name": "Alice"}'
+        result = _quote_unquoted_keys(original)
+        # Should still have exactly the quoted key
+        assert '"name":' in result
+
+    def test_underscore_key(self) -> None:
+        result = _quote_unquoted_keys('{first_name: "Alice"}')
+        assert '"first_name":' in result
+
+    def test_key_with_digits(self) -> None:
+        result = _quote_unquoted_keys('{item2: "val"}')
+        assert '"item2":' in result
+
+    def test_empty_string(self) -> None:
+        assert _quote_unquoted_keys("") == ""
+
+    def test_key_after_newline(self) -> None:
+        content = '{\nname: "Alice",\nage: 30\n}'
+        result = _quote_unquoted_keys(content)
+        assert '"name":' in result
+        assert '"age":' in result
+
+    def test_does_not_corrupt_string_values_with_colon(self) -> None:
+        """Values containing word:pattern inside strings must not be quoted."""
+        content = '{"msg": "hello name: fake", "real": 1}'
+        result = _quote_unquoted_keys(content)
+        # The string value should be preserved unchanged
+        assert json.loads(result) == {"msg": "hello name: fake", "real": 1}
+
+    def test_does_not_corrupt_url_in_string(self) -> None:
+        content = '{"url": "https://example.com"}'
+        result = _quote_unquoted_keys(content)
+        assert json.loads(result) == {"url": "https://example.com"}
+
+
+# ---------------------------------------------------------------------------
+# Private helpers: _recover_truncated_json
+# ---------------------------------------------------------------------------
+
+
+class TestRecoverTruncatedJson:
+    """Tests for _recover_truncated_json."""
+
+    def test_missing_closing_brace(self) -> None:
+        result = _recover_truncated_json('{"a": 1')
+        assert result.endswith("}")
+        assert result.count("{") == result.count("}")
+
+    def test_missing_closing_bracket(self) -> None:
+        result = _recover_truncated_json("[1, 2, 3")
+        assert result.endswith("]")
+
+    def test_nested_missing_closers(self) -> None:
+        result = _recover_truncated_json('{"users": [{"name": "Alice"')
+        # Should close with }]}
+        assert result.endswith("}]}")
+
+    def test_already_balanced(self) -> None:
+        original = '{"a": 1}'
+        assert _recover_truncated_json(original) == original
+
+    def test_truncated_after_comma(self) -> None:
+        result = _recover_truncated_json('{"a": 1,')
+        # Should strip trailing comma and close
+        assert result.endswith("}")
+
+    def test_truncated_after_colon(self) -> None:
+        result = _recover_truncated_json('{"a":')
+        # Should strip trailing colon and close
+        assert result.endswith("}")
+
+    def test_empty_string(self) -> None:
+        assert _recover_truncated_json("") == ""
+
+    def test_deeply_nested(self) -> None:
+        content = '{"a": {"b": {"c": [1, 2'
+        result = _recover_truncated_json(content)
+        # 3 open braces + 1 open bracket → closes as ]}}}
+        import json
+
+        parsed = json.loads(result)
+        assert parsed == {"a": {"b": {"c": [1, 2]}}}
+
+    def test_truncated_inside_string_value(self) -> None:
+        # Truncated in the middle of a string value
+        result = _recover_truncated_json('{"name": "Ali')
+        # Should close the string and the object
+        assert result.endswith('"}')

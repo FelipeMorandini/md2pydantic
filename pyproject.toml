@@ -31,10 +31,12 @@ dependencies = [
 [project.optional-dependencies]
 pandas = ["pandas>=2.0.0"]
 markdown = ["marko>=2.0.0"]
+yaml = ["pyyaml>=6.0"]
 dev = [
     "pytest>=8.0.0",
     "ruff>=0.4.0",
     "mypy>=1.10.0",
+    "pyyaml>=6.0",
 ]
 
 [project.urls]

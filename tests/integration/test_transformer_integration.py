@@ -1,11 +1,19 @@
-"""Integration tests for the scan_tables → table_to_dicts pipeline."""
+"""Integration tests for the scan_tables → table_to_dicts pipeline
+and the scan_blocks → block_to_dict/blocks_to_dicts pipeline."""
 
 from __future__ import annotations
 
 import textwrap
 
+from md2pydantic.models import BlockType
 from md2pydantic.parser import scan_blocks, scan_tables
-from md2pydantic.transformers import table_to_dataframe, table_to_dicts, tables_to_dicts
+from md2pydantic.transformers import (
+    block_to_dict,
+    blocks_to_dicts,
+    table_to_dataframe,
+    table_to_dicts,
+    tables_to_dicts,
+)
 
 
 class TestFullPipelineMarkdownToDicts:
@@ -284,3 +292,229 @@ class TestTableMixedWithJSONBlocks:
 
         dicts = table_to_dicts(tables[0])
         assert dicts == [{"Col1": "x", "Col2": "y"}]
+
+
+# ---------------------------------------------------------------------------
+# scan_blocks → block_to_dict / blocks_to_dicts integration tests
+# ---------------------------------------------------------------------------
+
+
+class TestFencedJSONInLLMResponse:
+    """Scenario 1: Fenced JSON block surrounded by prose."""
+
+    def test_fenced_json_extracted_and_parsed(self) -> None:
+        md = textwrap.dedent("""\
+            Sure, here is the configuration you asked for:
+
+            ```json
+            {"name": "Alice", "age": 30, "active": true}
+            ```
+
+            Let me know if you need anything else!
+        """)
+
+        blocks = scan_blocks(md)
+        assert len(blocks) == 1
+        assert blocks[0].block_type == BlockType.JSON
+        assert blocks[0].fenced is True
+
+        result = block_to_dict(blocks[0])
+        assert result.error is None
+        assert result.data == {"name": "Alice", "age": 30, "active": True}
+        assert result.block_type == BlockType.JSON
+
+
+class TestFencedYAMLInLLMResponse:
+    """Scenario 2: Fenced YAML block surrounded by prose."""
+
+    def test_fenced_yaml_extracted_and_parsed(self) -> None:
+        md = textwrap.dedent("""\
+            Here is your YAML config:
+
+            ```yaml
+            database:
+              host: localhost
+              port: 5432
+              name: mydb
+            debug: true
+            ```
+
+            That should work for your setup.
+        """)
+
+        blocks = scan_blocks(md)
+        assert len(blocks) == 1
+        assert blocks[0].block_type == BlockType.YAML
+        assert blocks[0].fenced is True
+
+        result = block_to_dict(blocks[0])
+        assert result.error is None
+        assert result.data == {
+            "database": {"host": "localhost", "port": 5432, "name": "mydb"},
+            "debug": True,
+        }
+        assert result.block_type == BlockType.YAML
+
+
+class TestMessyJSONTrailingCommas:
+    """Scenario 3: Fenced JSON with trailing commas gets cleaned and parsed."""
+
+    def test_trailing_commas_cleaned(self) -> None:
+        md = textwrap.dedent("""\
+            ```json
+            {"a": 1, "b": 2,}
+            ```
+        """)
+
+        blocks = scan_blocks(md)
+        assert len(blocks) == 1
+
+        result = block_to_dict(blocks[0])
+        assert result.error is None
+        assert result.data == {"a": 1, "b": 2}
+
+    def test_nested_trailing_commas(self) -> None:
+        md = textwrap.dedent("""\
+            ```json
+            {"items": [1, 2, 3,], "meta": {"count": 3,},}
+            ```
+        """)
+
+        blocks = scan_blocks(md)
+        assert len(blocks) == 1
+
+        result = block_to_dict(blocks[0])
+        assert result.error is None
+        assert result.data == {"items": [1, 2, 3], "meta": {"count": 3}}
+
+
+class TestInlineJSONInProse:
+    """Scenario 4: Bare JSON object embedded in prose text."""
+
+    def test_inline_json_detected_and_parsed(self) -> None:
+        md = textwrap.dedent("""\
+            The result is {"key": "value", "count": 42} and that's it.
+        """)
+
+        blocks = scan_blocks(md)
+        assert len(blocks) == 1
+        assert blocks[0].fenced is False
+        assert blocks[0].block_type == BlockType.JSON
+
+        result = block_to_dict(blocks[0])
+        assert result.error is None
+        assert result.data == {"key": "value", "count": 42}
+
+
+class TestMultipleMixedBlocks:
+    """Both JSON and YAML blocks parsed via blocks_to_dicts."""
+
+    def test_json_and_yaml_both_parsed(self) -> None:
+        md = textwrap.dedent("""\
+            Here is some JSON:
+
+            ```json
+            {"status": "ok", "code": 200}
+            ```
+
+            And here is some YAML:
+
+            ```yaml
+            server:
+              host: 0.0.0.0
+              port: 8080
+            ```
+
+            That covers both formats.
+        """)
+
+        blocks = scan_blocks(md)
+        assert len(blocks) == 2
+
+        results = blocks_to_dicts(blocks)
+        assert len(results) == 2
+
+        # First block: JSON
+        assert results[0].error is None
+        assert results[0].data == {"status": "ok", "code": 200}
+        assert results[0].block_type == BlockType.JSON
+
+        # Second block: YAML
+        assert results[1].error is None
+        assert results[1].data == {"server": {"host": "0.0.0.0", "port": 8080}}
+        assert results[1].block_type == BlockType.YAML
+
+
+class TestTruncatedJSONRecovery:
+    """Scenario 6: Fenced JSON with missing closing braces is recovered."""
+
+    def test_missing_closing_braces_recovered(self) -> None:
+        md = textwrap.dedent("""\
+            ```json
+            {"user": {"name": "Alice", "address": {"city": "NYC"
+            ```
+        """)
+
+        blocks = scan_blocks(md)
+        assert len(blocks) == 1
+
+        result = block_to_dict(blocks[0])
+        assert result.error is None
+        assert result.data is not None
+        # The recovery should produce a valid nested structure
+        assert result.data["user"]["name"] == "Alice"
+        assert result.data["user"]["address"]["city"] == "NYC"
+
+    def test_missing_closing_bracket_recovered(self) -> None:
+        md = textwrap.dedent("""\
+            ```json
+            {"items": [1, 2, 3
+            ```
+        """)
+
+        blocks = scan_blocks(md)
+        assert len(blocks) == 1
+
+        result = block_to_dict(blocks[0])
+        assert result.error is None
+        assert result.data is not None
+        assert result.data["items"] == [1, 2, 3]
+
+
+class TestInvalidContentError:
+    """Unparseable fenced block returns error in TransformResult."""
+
+    def test_unparseable_json_returns_error(self) -> None:
+        md = textwrap.dedent("""\
+            ```json
+            this is not json at all @@@ !!!
+            ```
+        """)
+
+        blocks = scan_blocks(md)
+        # The scanner may or may not detect this as a JSON block depending on
+        # content heuristics, but if it's labeled json it should be attempted.
+        # Since the lang hint is "json", scan_blocks should pick it up.
+        assert len(blocks) == 1
+        assert blocks[0].block_type == BlockType.JSON
+
+        result = block_to_dict(blocks[0])
+        assert result.data is None
+        assert result.error is not None
+        assert "parse failed" in result.error.lower() or "error" in result.error.lower()
+        assert result.raw_content == blocks[0].content
+
+    def test_unparseable_yaml_returns_error(self) -> None:
+        md = textwrap.dedent("""\
+            ```yaml
+            : : : [[[invalid
+            ```
+        """)
+
+        blocks = scan_blocks(md)
+        assert len(blocks) == 1
+        assert blocks[0].block_type == BlockType.YAML
+
+        result = block_to_dict(blocks[0])
+        assert result.data is None
+        assert result.error is not None
