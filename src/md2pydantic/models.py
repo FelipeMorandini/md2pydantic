@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any
+from typing import Any, Generic, TypeVar
 
 from pydantic import BaseModel, ConfigDict
+
+T = TypeVar("T")
 
 
 class BlockType(str, Enum):
@@ -50,6 +52,27 @@ class TransformResult(BaseModel):
     error: str | None
     raw_content: str
     block_type: BlockType
+
+
+class FieldError(BaseModel):
+    """A single field-level validation error."""
+
+    model_config = ConfigDict(frozen=True)
+
+    field: str
+    message: str
+    input_value: Any
+    error_type: str
+
+
+class ValidationResult(BaseModel, Generic[T]):
+    """Result of validating a dict against a Pydantic model."""
+
+    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
+
+    data: T | None
+    errors: tuple[FieldError, ...]
+    raw_input: dict[str, Any]
 
 
 class MDConverter:
