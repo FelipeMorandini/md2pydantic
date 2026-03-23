@@ -423,3 +423,15 @@ class TestEdgeCases:
         md = "See [the docs](https://example.com) and [notes](url)."
         blocks = scan_blocks(md)
         assert blocks == []
+
+    def test_indented_fenced_block(self) -> None:
+        """CommonMark allows up to 3 spaces of indentation before fences."""
+        md = "   ```json\n   {\"key\": \"value\"}\n   ```\n"
+        block = _single(scan_blocks(md))
+        assert block.block_type == BlockType.JSON
+
+    def test_space_between_fence_and_hint(self) -> None:
+        """Space between backticks and language hint should be accepted."""
+        md = "``` json\n{\"key\": \"value\"}\n```\n"
+        block = _single(scan_blocks(md))
+        assert block.block_type == BlockType.JSON

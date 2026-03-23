@@ -20,15 +20,15 @@ _LANG_HINT_MAP: dict[str, BlockType] = {
 # matching closing fence.
 # Handles: extra backticks, trailing text after closing fence, mixed case hints
 _FENCED_BLOCK_RE = re.compile(
-    r"^(?P<fence>`{3,})(?P<lang>[a-zA-Z0-9_-]*)[^\S\n]*\n"
+    r"^[ ]{0,3}(?P<fence>`{3,})[^\S\n]*(?P<lang>[a-zA-Z0-9_-]*)[^\S\n]*\n"
     r"(?P<content>.*?)\n?"
-    r"^(?P=fence)[`]*[^\n]*(?:\n|$)",
+    r"^[ ]{0,3}(?P=fence)[`]*[^\n]*(?:\n|$)",
     re.MULTILINE | re.DOTALL,
 )
 
 # Fallback for unclosed fenced blocks with a JSON/YAML hint: extract to EOF
 _UNCLOSED_FENCED_RE = re.compile(
-    r"^(?P<fence>`{3,})(?P<lang>json|yaml|yml)[^\S\n]*\n"
+    r"^[ ]{0,3}(?P<fence>`{3,})[^\S\n]*(?P<lang>json|yaml|yml)[^\S\n]*\n"
     r"(?P<content>.+)",
     re.MULTILINE | re.DOTALL | re.IGNORECASE,
 )
@@ -44,7 +44,8 @@ def scan_blocks(markdown: str) -> list[CodeBlock]:
     # Normalize line endings
     text = markdown.replace("\r\n", "\n").replace("\r", "\n")
 
-    blocks: list[CodeBlock] = []
+    # Collect (char_offset, CodeBlock) pairs for accurate source-order sorting
+    block_pairs: list[tuple[int, CodeBlock]] = []
     claimed_spans: list[tuple[int, int]] = []
 
     # Phase 1: Fenced blocks (closed)
@@ -69,15 +70,16 @@ def scan_blocks(markdown: str) -> list[CodeBlock]:
         start_line = _line_number_at_offset(text, match.start())
         end_line = _line_number_at_offset(text, match.end() - 1)
 
-        blocks.append(
+        block_pairs.append((
+            match.start(),
             CodeBlock(
                 content=cleaned,
                 block_type=block_type,
                 fenced=True,
                 start_line=start_line,
                 end_line=end_line,
-            )
-        )
+            ),
+        ))
 
     # Phase 1b: Unclosed fenced blocks (fallback)
     for match in _UNCLOSED_FENCED_RE.finditer(text):
@@ -95,15 +97,16 @@ def scan_blocks(markdown: str) -> list[CodeBlock]:
         start_line = _line_number_at_offset(text, match.start())
         end_line = _line_number_at_offset(text, match.end() - 1)
 
-        blocks.append(
+        block_pairs.append((
+            match.start(),
             CodeBlock(
                 content=cleaned,
                 block_type=block_type,
                 fenced=True,
                 start_line=start_line,
                 end_line=end_line,
-            )
-        )
+            ),
+        ))
         claimed_spans.append((match.start(), match.end()))
 
     # Phase 2: Unfenced JSON objects and arrays
@@ -125,20 +128,21 @@ def scan_blocks(markdown: str) -> list[CodeBlock]:
             start_line = _line_number_at_offset(text, start)
             end_line = _line_number_at_offset(text, end - 1)
 
-            blocks.append(
+            block_pairs.append((
+                start,
                 CodeBlock(
                     content=cleaned,
                     block_type=block_type,
                     fenced=False,
                     start_line=start_line,
                     end_line=end_line,
-                )
-            )
+                ),
+            ))
             claimed_spans.append((start, end))
 
-    # Sort by position in document
-    blocks.sort(key=lambda b: b.start_line)
-    return blocks
+    # Sort by character offset for accurate source-order
+    block_pairs.sort(key=lambda pair: pair[0])
+    return [block for _, block in block_pairs]
 
 
 def _normalize_lang_hint(hint: str) -> BlockType:
@@ -174,7 +178,7 @@ def _clean_content(raw: str) -> str:
 
 def _line_number_at_offset(text: str, offset: int) -> int:
     """Convert a character offset to a 0-based line number."""
-    return text[:offset].count("\n")
+    return text.count("\n", 0, offset)
 
 
 def _overlaps(start: int, end: int, claimed: list[tuple[int, int]]) -> bool:
