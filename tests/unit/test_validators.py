@@ -7,6 +7,7 @@ success cases, failure cases, null sentinel coercion, and bool coercion.
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Annotated
 
 import pytest
 from pydantic import BaseModel
@@ -377,3 +378,36 @@ class TestEdgeCases:
         result = validate_dict(data, OptionalModel)
         assert result.data is not None
         assert result.data.nickname == "none"
+
+    def test_annotated_bool_field_coercion(self) -> None:
+        """Annotated[bool, ...] fields should still get Yes/No coercion."""
+        from pydantic import Field
+
+        class AnnotatedModel(BaseModel):
+            name: str
+            active: Annotated[bool, Field(description="Is active")]
+
+        data = {"name": "Alice", "active": "Yes"}
+        result = validate_dict(data, AnnotatedModel)
+        assert result.data is not None
+        assert result.data.active is True
+
+    def test_annotated_optional_null_sentinel(self) -> None:
+        """Annotated[str | None, ...] fields should get null sentinel coercion."""
+        from pydantic import Field
+
+        class AnnotatedOptModel(BaseModel):
+            name: str
+            note: Annotated[str | None, Field(description="A note")] = None
+
+        data = {"name": "Alice", "note": "N/A"}
+        result = validate_dict(data, AnnotatedOptModel)
+        assert result.data is not None
+        assert result.data.note is None
+
+    def test_raw_input_is_copy(self) -> None:
+        """raw_input should be a copy, not a reference to the original dict."""
+        data = {"name": "Alice", "age": "30", "city": "NY"}
+        result = validate_dict(data, PersonModel)
+        data["name"] = "MUTATED"
+        assert result.raw_input["name"] == "Alice"

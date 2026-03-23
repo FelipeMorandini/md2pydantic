@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import types
-from typing import Any, TypeVar, Union, get_args, get_origin
+from typing import Annotated, Any, TypeVar, Union, get_args, get_origin
 
 from pydantic import BaseModel, ValidationError
 
@@ -36,7 +36,7 @@ def validate_dict(
         return ValidationResult(
             data=instance,
             errors=(),
-            raw_input=data,
+            raw_input=dict(data),
         )
     except ValidationError as e:
         field_errors = tuple(
@@ -51,7 +51,7 @@ def validate_dict(
         return ValidationResult(
             data=None,
             errors=field_errors,
-            raw_input=data,
+            raw_input=dict(data),
         )
 
 
@@ -89,6 +89,9 @@ def _preprocess_dict(
         if annotation is None:
             continue
 
+        # Unwrap Annotated[X, ...] to get the base type
+        annotation = _unwrap_annotated(annotation)
+
         is_opt = _is_optional(annotation)
         inner = _unwrap_optional(annotation) if is_opt else annotation
 
@@ -106,6 +109,15 @@ def _preprocess_dict(
                 result[field_name] = False
 
     return result
+
+
+def _unwrap_annotated(annotation: Any) -> Any:
+    """Unwrap Annotated[X, ...] to get the base type X."""
+    if get_origin(annotation) is Annotated:
+        args = get_args(annotation)
+        if args:
+            return args[0]
+    return annotation
 
 
 def _is_optional(annotation: Any) -> bool:
