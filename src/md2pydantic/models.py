@@ -177,14 +177,9 @@ class ExtractionError(MD2PydanticError):
                     loc_str = f"block at lines {loc.start_line}-{loc.end_line}"
                 if err.field_errors:
                     field_msgs = "; ".join(
-                        f"{fe.field}: {fe.message}"
-                        for fe in err.field_errors
+                        f"{fe.field}: {fe.message}" for fe in err.field_errors
                     )
-                    parts.append(
-                        f"  [{i}] Validation error in {loc_str}: {field_msgs}"
-                    )
+                    parts.append(f"  [{i}] Validation error in {loc_str}: {field_msgs}")
                 else:
-                    parts.append(
-                        f"  [{i}] Validation error in {loc_str}"
-                    )
+                    parts.append(f"  [{i}] Validation error in {loc_str}")
         return "\n".join(parts)
