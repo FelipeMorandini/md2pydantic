@@ -84,7 +84,9 @@ class TestExtractionErrorStr:
         err = ExtractionError("Validation failed", errors=[ve])
         s = str(err)
         assert "Validation error" in s
-        assert "table 0, row 2" in s
+        assert "table 0" in s
+        assert "'Users'" in s
+        assert "row 2" in s
         assert "age" in s
 
     def test_str_includes_validation_error_with_block_location(self) -> None:

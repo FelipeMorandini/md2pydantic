@@ -76,7 +76,10 @@ class ValidationResult(BaseModel, Generic[T]):
 
 
 class BlockLocation(BaseModel):
-    """Source location of a code block in the original markdown."""
+    """Source location of a code block in the original markdown.
+
+    Line numbers are 0-based.
+    """
 
     model_config = ConfigDict(frozen=True)
 
@@ -87,7 +90,11 @@ class BlockLocation(BaseModel):
 
 
 class RowLocation(BaseModel):
-    """Source location of a table row in the original markdown."""
+    """Source location of a table row in the original markdown.
+
+    Line numbers are 0-based. ``start_line`` refers to the table's
+    header row, not the individual data row.
+    """
 
     model_config = ConfigDict(frozen=True)
 
@@ -162,11 +169,22 @@ class ExtractionError(MD2PydanticError):
             elif isinstance(err, ModelValidationError):
                 loc = err.location
                 if isinstance(loc, RowLocation):
-                    loc_str = f"table {loc.table_index}, row {loc.row_index}"
+                    loc_str = f"table {loc.table_index}"
+                    if loc.table_heading:
+                        loc_str += f" ({loc.table_heading!r})"
+                    loc_str += f", row {loc.row_index}"
                 else:
                     loc_str = f"block at lines {loc.start_line}-{loc.end_line}"
-                field_msgs = "; ".join(
-                    f"{fe.field}: {fe.message}" for fe in err.field_errors
-                )
-                parts.append(f"  [{i}] Validation error in {loc_str}: {field_msgs}")
+                if err.field_errors:
+                    field_msgs = "; ".join(
+                        f"{fe.field}: {fe.message}"
+                        for fe in err.field_errors
+                    )
+                    parts.append(
+                        f"  [{i}] Validation error in {loc_str}: {field_msgs}"
+                    )
+                else:
+                    parts.append(
+                        f"  [{i}] Validation error in {loc_str}"
+                    )
         return "\n".join(parts)
