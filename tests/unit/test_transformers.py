@@ -401,7 +401,7 @@ class TestJsonBlockToDict:
         assert result.block_type == BlockType.JSON
 
     def test_trailing_comma_in_array(self) -> None:
-        block = _make_code_block('[1, 2, 3,]')
+        block = _make_code_block("[1, 2, 3,]")
         result = json_block_to_dict(block)
         assert result.data == [1, 2, 3]
         assert result.error is None

@@ -384,10 +384,15 @@ def _quote_unquoted_keys(content: str) -> str:
                 k = j
                 while k < length and content[k] in (" ", "\t"):
                     k += 1
-                if k < length and content[k] == ":" and content[i:j] not in (
-                    "true",
-                    "false",
-                    "null",
+                if (
+                    k < length
+                    and content[k] == ":"
+                    and content[i:j]
+                    not in (
+                        "true",
+                        "false",
+                        "null",
+                    )
                 ):
                     # It's an unquoted key — quote it
                     result.append('"')
