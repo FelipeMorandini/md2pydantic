@@ -448,6 +448,9 @@ def _recover_truncated_json(content: str) -> str:
 
     # If we're in an unclosed string, close it first
     if in_string:
+        # If the string ends with a backslash, it would escape our closing quote
+        if stripped.endswith("\\"):
+            stripped += "\\"
         stripped += '"'
 
     # Cap recovery depth
