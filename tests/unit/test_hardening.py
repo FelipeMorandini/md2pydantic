@@ -195,6 +195,7 @@ class TestTruncatedJsonBackslashRecovery:
         # The JSON string value ends with a literal backslash
         recovered = _recover_truncated_json('{"key": "val\\')
         import json
+
         data = json.loads(recovered)
         assert data["key"] == "val\\"
 
@@ -202,6 +203,7 @@ class TestTruncatedJsonBackslashRecovery:
         """'{"key": "value' -> recovered normally (no trailing backslash)."""
         recovered = _recover_truncated_json('{"key": "value')
         import json
+
         data = json.loads(recovered)
         assert data["key"] == "value"
 
@@ -260,10 +262,7 @@ class TestIntegrationMultipleFixesTogether:
         backslash. The shorter ``` at the end should be stripped (#21), and the
         JSON should be recovered (#28).
         """
-        md = (
-            "Here is the file path:\n\n"
-            '````json\n{"key": "val\\\n```'
-        )
+        md = 'Here is the file path:\n\n````json\n{"key": "val\\\n```'
         blocks = scan_blocks(md)
         assert len(blocks) == 1
         # The ``` line should have been stripped from content
