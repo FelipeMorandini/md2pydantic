@@ -22,7 +22,7 @@ _LANG_HINT_MAP: dict[str, BlockType] = {
 _FENCED_BLOCK_RE = re.compile(
     r"^[ ]{0,3}(?P<fence>`{3,}|~{3,})[^\S\n]*(?P<lang>[a-zA-Z0-9_-]*)[^\S\n]*\n"
     r"(?P<content>.*?)\n?"
-    r"^[ ]{0,3}(?P=fence)[`~]*[^\n]*(?:\n|$)",
+    r"^[ ]{0,3}(?P=fence)[^\n]*(?:\n|$)",
     re.MULTILINE | re.DOTALL,
 )
 
