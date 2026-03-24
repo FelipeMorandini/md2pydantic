@@ -11,13 +11,13 @@ Built for resilience against common LLM output quirks: triple-backtick wrappers,
 
 ## Features
 
-- **One-liner API** -- `MDConverter(Model).parse_tables(md)` is the entire interface
+- **One-liner API** -- `MDConverter(Model).parse_tables(md)` gets you started in one line
 - **Markdown tables** -- pipe-delimited tables become lists of Pydantic models
 - **JSON blocks** -- fenced and inline JSON, with recovery for trailing commas, single quotes, unquoted keys, and truncated output
 - **YAML blocks** -- fenced YAML code blocks (requires `pyyaml`)
 - **Auto-detect** -- `parse()` tries code blocks first, then tables
 - **Yes/No bool coercion** -- `"Yes"`, `"No"`, `"Y"`, `"N"`, `"true"`, `"false"`, `"on"`, `"off"` all map to `bool`
-- **Null sentinel handling** -- empty cells, `"N/A"`, `"null"`, `"-"` become `None` for optional fields
+- **Null sentinel handling** -- empty cells, `"N/A"`, `"NA"`, `"null"`, `"-"`, `"—"` become `None` for optional fields
 - **Table selection** -- filter tables by heading or index in multi-table documents
 - **LLM-resilient** -- handles unclosed code fences, trailing prose, extra backticks, and nested structures
 - **Pydantic v2 native** -- leverages Pydantic's own type coercion (str to int, str to float, str to datetime, etc.)
@@ -138,13 +138,21 @@ from md2pydantic import MDConverter
 result = MDConverter(ServerConfig).parse(markdown)
 ```
 
-Returns a single model instance for code blocks, or a `list` for tables.
+Returns a single model instance for code blocks, or a `list` for tables and JSON arrays.
 
 ### Select Tables by Heading
 
 When a document contains multiple tables, filter by the preceding Markdown heading:
 
 ```python
+from pydantic import BaseModel
+from md2pydantic import MDConverter
+
+class User(BaseModel):
+    name: str
+    age: int
+    active: bool
+
 markdown = """
 ## Current Staff
 
@@ -193,7 +201,7 @@ employees = MDConverter(Employee).parse_tables(markdown)
 # employees[2].salary is None  (from "-")
 ```
 
-Recognized null sentinels: `""` (empty), `"N/A"`, `"NA"`, `"null"`, `"-"`.
+Recognized null sentinels: `""` (empty), `"N/A"`, `"NA"`, `"null"`, `"-"`, `"—"`. Matching is case-insensitive.
 
 ### Error Handling
 
