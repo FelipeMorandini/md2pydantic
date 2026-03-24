@@ -32,6 +32,10 @@ dependencies = [
 pandas = ["pandas>=2.0.0"]
 markdown = ["marko>=2.0.0"]
 yaml = ["pyyaml>=6.0"]
+docs = [
+    "mkdocs>=1.6.0",
+    "mkdocs-material>=9.5.0",
+]
 dev = [
     "pytest>=8.0.0",
     "pytest-cov>=6.0.0",
@@ -42,6 +46,7 @@ dev = [
 
 [project.urls]
 Homepage = "https://github.com/felipemorandini/md2pydantic"
+Documentation = "https://felipemorandini.github.io/md2pydantic/"
 Repository = "https://github.com/felipemorandini/md2pydantic"
 Issues = "https://github.com/felipemorandini/md2pydantic/issues"
 
