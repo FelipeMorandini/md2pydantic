@@ -37,6 +37,7 @@ The return type depends on the detected format:
 | JSON object    | `T` (single instance) |
 | YAML object    | `T` (single instance) |
 | JSON array     | `list[T]` |
+| YAML array     | `list[T]` |
 | Markdown table | `list[T]` |
 
 ## When to Use `parse()` vs Specific Methods

@@ -86,8 +86,7 @@ first that validates.
 **Raises:**
 
 - `ExtractionError` -- no YAML blocks found or none
-  validate
-- `ImportError` -- if `pyyaml` is not installed
+  validate, or if `pyyaml` is not installed
 
 ---
 
@@ -106,7 +105,7 @@ blocks (JSON/YAML) first, then falls back to tables.
 **Returns:**
 
 - `T` for a single code block match (when `partial=False`)
-- `list[T]` for table or JSON array match
+- `list[T]` for table, JSON array, or YAML array match
   (when `partial=False`)
 - `PartialResult[T]` when `partial=True`
 

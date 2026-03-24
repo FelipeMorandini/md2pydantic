@@ -33,7 +33,7 @@ config = MDConverter(ServerConfig).parse_yaml(markdown)
     pip install md2pydantic[yaml]
     ```
 
-    An `ImportError` is raised at parse time if `pyyaml`
+    An `ExtractionError` is raised at parse time if `pyyaml`
     is not installed.
 
 !!! note

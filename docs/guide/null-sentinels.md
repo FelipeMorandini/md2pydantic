@@ -39,7 +39,7 @@ The following values are treated as `None`:
 | `NA`     | `\| NA \|`   |
 | `null`   | `\| null \|` |
 | `-`      | `\| - \|`    |
-| `--`     | `\| -- \|`  |
+| `—`      | `\| — \|`  |
 
 Matching is **case-insensitive**: `n/a`, `N/A`, `Null`,
 and `NULL` are all treated the same.
