@@ -211,13 +211,28 @@ from md2pydantic import MDConverter, ExtractionError
 try:
     result = MDConverter(MyModel).parse_tables("no tables here")
 except ExtractionError as e:
-    print(e)            # "No tables found in markdown"
-    print(e.errors)     # [] or list of field-level validation errors
+    print(e)            # Human-readable summary with line numbers
+    print(e.errors)     # List of typed error details
 ```
 
 `ExtractionError` is raised when:
 - No structured data is found in the input
 - Structured data is found but none of it validates against the model
+
+Each error in `.errors` is either a `TransformError` (parsing failed) or `ModelValidationError` (Pydantic rejected the data), both with source location info.
+
+### Partial Results
+
+When parsing tables with mixed valid/invalid rows, use `partial=True` to get both:
+
+```python
+from md2pydantic import MDConverter, PartialResult
+
+result = MDConverter(User).parse_tables(markdown, partial=True)
+# result.data → list of valid User instances
+# result.errors → list of typed errors with row locations
+# result.has_errors → True if any rows failed
+```
 
 `ExtractionError` inherits from `MD2PydanticError`, so you can catch either.
 

@@ -91,7 +91,7 @@ class TestAllExports:
     def test_all_has_expected_length(self) -> None:
         import md2pydantic
 
-        assert len(md2pydantic.__all__) == 4
+        assert len(md2pydantic.__all__) == 6
 
     def test_all_entries_are_resolvable(self) -> None:
         """Every name in __all__ should be an actual attribute of the package."""
