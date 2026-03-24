@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "md2pydantic"
-version = "0.2.0"
+version = "0.2.1"
 description = "Extract structured data from messy Markdown strings into Pydantic v2 models"
 readme = "README.md"
 license = { file = "LICENSE" }

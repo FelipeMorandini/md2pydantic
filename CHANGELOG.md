@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.1] - 2026-03-24
+
+### Fixed
+
+- Reduce false positives for unfenced `{...}` extraction (require `"` or `:` inside braces)
+- Improve YAML inference heuristic (require space after colon, exclude URLs with `://`)
+- Strip trailing shorter fences from unclosed block content
+- Fix double-backslash-before-pipe edge case in table parsing
+- Add tilde fence support (`~~~`) to all fence regex patterns
+- Fix truncated JSON recovery when string ends with trailing backslash
+
+### Added
+
+- pytest-cov with 93% code coverage and 80% minimum threshold
+
 ## [0.2.0] - 2026-03-24
 
 ### Added
@@ -33,5 +48,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Full type annotations (mypy strict mode)
 - GitHub Actions CI/CD with automated PyPI publishing
 
+[0.2.1]: https://github.com/FelipeMorandini/md2pydantic/releases/tag/v0.2.1
 [0.2.0]: https://github.com/FelipeMorandini/md2pydantic/releases/tag/v0.2.0
 [0.1.0]: https://github.com/FelipeMorandini/md2pydantic/releases/tag/v0.1.0
