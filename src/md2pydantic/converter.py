@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any, Generic
 
+from pydantic import BaseModel
+
 from md2pydantic.models import BlockType, ExtractionError, T
 from md2pydantic.parser import scan_blocks, scan_tables
 from md2pydantic.transformers import block_to_dict, table_to_dicts
@@ -21,6 +23,10 @@ class MDConverter(Generic[T]):
     """
 
     def __init__(self, model: type[T]) -> None:
+        if not (isinstance(model, type) and issubclass(model, BaseModel)):
+            raise TypeError(
+                f"model must be a Pydantic BaseModel subclass, got {model!r}"
+            )
         self.model = model
 
     def parse_tables(
@@ -98,7 +104,6 @@ class MDConverter(Generic[T]):
             ExtractionError: If no structured data is found.
         """
         blocks = scan_blocks(markdown)
-        tables = scan_tables(markdown)
         all_errors: list[Any] = []
 
         # Try code blocks first (more precise)
@@ -116,7 +121,8 @@ class MDConverter(Generic[T]):
                         return validation.data
                     all_errors.extend(validation.errors)
                 elif isinstance(data, list):
-                    # JSON array: validate each dict element
+                    # JSON/YAML array: validate all dict elements,
+                    # return those that match
                     validated: list[T] = []
                     for item in data:
                         if isinstance(item, dict):
@@ -128,7 +134,8 @@ class MDConverter(Generic[T]):
                     if validated:
                         return validated
 
-        # Fall back to tables
+        # Fall back to tables (lazy — only scanned if code blocks fail)
+        tables = scan_tables(markdown)
         if tables:
             results: list[T] = []
             for table in tables:
@@ -142,9 +149,12 @@ class MDConverter(Generic[T]):
             if results:
                 return results
 
-        raise ExtractionError(
-            "No structured data found in markdown", errors=all_errors
-        )
+        if all_errors:
+            raise ExtractionError(
+                "Structured data found but none matched the model",
+                errors=all_errors,
+            )
+        raise ExtractionError("No structured data found in markdown")
 
     def _parse_code_blocks(self, markdown: str, block_type: BlockType) -> T:
         """Parse code blocks of a specific type and return validated model."""
@@ -169,7 +179,7 @@ class MDConverter(Generic[T]):
                     return validation.data
                 all_errors.extend(validation.errors)
             elif isinstance(data, list):
-                # JSON/YAML array: try first dict element
+                # JSON/YAML array: try each dict element, return first match
                 for item in data:
                     if isinstance(item, dict):
                         validation = validate_dict(item, self.model)

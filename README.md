@@ -46,7 +46,13 @@ products = MDConverter(Product).parse_tables(markdown)
 ### JSON
 
 ```python
+from pydantic import BaseModel
 from md2pydantic import MDConverter
+
+class Config(BaseModel):
+    host: str
+    port: int
+    debug: bool
 
 markdown = '''Here is the config:
 ```json
