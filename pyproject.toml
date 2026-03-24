@@ -34,6 +34,7 @@ markdown = ["marko>=2.0.0"]
 yaml = ["pyyaml>=6.0"]
 dev = [
     "pytest>=8.0.0",
+    "pytest-cov>=6.0.0",
     "ruff>=0.4.0",
     "mypy>=1.10.0",
     "pyyaml>=6.0",
@@ -72,6 +73,20 @@ mypy_path = "src"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+addopts = "--cov=md2pydantic --cov-report=term-missing"
+
+[tool.coverage.run]
+source_pkgs = ["md2pydantic"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+fail_under = 80
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/md2pydantic"]
