@@ -76,7 +76,7 @@ pythonpath = ["src"]
 addopts = "--cov=md2pydantic --cov-report=term-missing"
 
 [tool.coverage.run]
-source = ["md2pydantic"]
+source_pkgs = ["md2pydantic"]
 branch = true
 
 [tool.coverage.report]
