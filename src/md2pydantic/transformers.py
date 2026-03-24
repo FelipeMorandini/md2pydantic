@@ -448,6 +448,15 @@ def _recover_truncated_json(content: str) -> str:
 
     # If we're in an unclosed string, close it first
     if in_string:
+        # Count trailing backslashes — only odd count escapes our quote
+        backslash_count = 0
+        for ch in reversed(stripped):
+            if ch == "\\":
+                backslash_count += 1
+            else:
+                break
+        if backslash_count % 2 == 1:
+            stripped += "\\"
         stripped += '"'
 
     # Cap recovery depth

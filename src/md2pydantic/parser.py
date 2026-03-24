@@ -20,22 +20,22 @@ _LANG_HINT_MAP: dict[str, BlockType] = {
 # matching closing fence.
 # Handles: extra backticks, trailing text after closing fence, mixed case hints
 _FENCED_BLOCK_RE = re.compile(
-    r"^[ ]{0,3}(?P<fence>`{3,})[^\S\n]*(?P<lang>[a-zA-Z0-9_-]*)[^\S\n]*\n"
+    r"^[ ]{0,3}(?P<fence>`{3,}|~{3,})[^\S\n]*(?P<lang>[a-zA-Z0-9_-]*)[^\S\n]*\n"
     r"(?P<content>.*?)\n?"
-    r"^[ ]{0,3}(?P=fence)[`]*[^\n]*(?:\n|$)",
+    r"^[ ]{0,3}(?P=fence)[^\n]*(?:\n|$)",
     re.MULTILINE | re.DOTALL,
 )
 
 # Fallback for unclosed fenced blocks with a JSON/YAML hint: extract to EOF
 _UNCLOSED_FENCED_RE = re.compile(
-    r"^[ ]{0,3}(?P<fence>`{3,})[^\S\n]*(?P<lang>json|yaml|yml)[^\S\n]*\n"
+    r"^[ ]{0,3}(?P<fence>`{3,}|~{3,})[^\S\n]*(?P<lang>json|yaml|yml)[^\S\n]*\n"
     r"(?P<content>.+)",
     re.MULTILINE | re.DOTALL | re.IGNORECASE,
 )
 
 # Generic unclosed fence (any language or none) — used for table exclusion
 _UNCLOSED_FENCE_GENERIC_RE = re.compile(
-    r"^[ ]{0,3}`{3,}[^\n]*\n"
+    r"^[ ]{0,3}(?:`{3,}|~{3,})[^\n]*\n"
     r".+",
     re.MULTILINE | re.DOTALL,
 )
@@ -97,6 +97,22 @@ def scan_blocks(markdown: str) -> list[CodeBlock]:
 
         lang = match.group("lang").strip().lower()
         content = match.group("content")
+
+        fence_len = len(match.group("fence"))
+        # Strip trailing lines that look like shorter (non-closing) fences
+        lines = content.split("\n")
+        while lines:
+            stripped_line = lines[-1].strip()
+            if not stripped_line:
+                lines.pop()
+                continue
+            fence_match = re.match(r"^[`~]{3,}", stripped_line)
+            if fence_match and len(fence_match.group()) < fence_len:
+                lines.pop()
+            else:
+                break
+        content = "\n".join(lines)
+
         block_type = _normalize_lang_hint(lang)
 
         cleaned = _clean_content(content)
@@ -127,6 +143,13 @@ def scan_blocks(markdown: str) -> list[CodeBlock]:
                 continue
 
             candidate = text[start:end]
+
+            # Only for brace pairs: require " or : inside to look like JSON
+            if open_char == "{":
+                interior = candidate[1:-1]
+                if '"' not in interior and ":" not in interior:
+                    continue
+
             block_type = _infer_block_type(candidate)
 
             if block_type == BlockType.UNKNOWN:
@@ -170,7 +193,10 @@ def _infer_block_type(content: str) -> BlockType:
         return BlockType.UNKNOWN
     if stripped.startswith(("{", "[")):
         return BlockType.JSON
-    if re.search(r"^[a-zA-Z_][\w]*\s*:", stripped, re.MULTILINE):
+    if (
+        re.search(r"^[a-zA-Z_][\w]*\s*:\s+", stripped, re.MULTILINE)
+        and "://" not in stripped
+    ):
         return BlockType.YAML
     return BlockType.UNKNOWN
 
@@ -439,13 +465,19 @@ def _has_pipe(line: str) -> bool:
 def _parse_table_row(line: str) -> list[str]:
     """Split a pipe-delimited row into stripped cell values.
 
-    Handles escaped pipes (\\|) within cell content.
+    Handles escaped pipes (\\|) within cell content. A pipe preceded by
+    an odd number of backslashes is escaped; an even number means the
+    pipe is a cell delimiter.
     """
     stripped = line.strip()
 
-    # Replace escaped pipes with a placeholder unlikely to appear in input
-    placeholder = "\x00\x01PIPE\x01\x00"
-    cleaned = stripped.replace("\\|", placeholder)
+    # Two-pass placeholder approach:
+    # First replace \\\\ (escaped backslash) so that \\\\| becomes <BS>|
+    # Then replace \\| (escaped pipe) with placeholder
+    bs_placeholder = "\x00\x01BS\x01\x00"
+    pipe_placeholder = "\x00\x01PIPE\x01\x00"
+    cleaned = stripped.replace("\\\\", bs_placeholder)
+    cleaned = cleaned.replace("\\|", pipe_placeholder)
 
     # Remove leading/trailing pipes
     if cleaned.startswith("|"):
@@ -453,8 +485,11 @@ def _parse_table_row(line: str) -> list[str]:
     if cleaned.endswith("|"):
         cleaned = cleaned[:-1]
 
-    # Split on pipes and restore escaped pipes
-    cells = [cell.strip().replace(placeholder, "|") for cell in cleaned.split("|")]
+    # Split on pipes and restore placeholders
+    cells = [
+        cell.strip().replace(pipe_placeholder, "|").replace(bs_placeholder, "\\")
+        for cell in cleaned.split("|")
+    ]
     return cells
 
 
