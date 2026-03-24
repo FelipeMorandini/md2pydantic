@@ -9,10 +9,17 @@ except PackageNotFoundError:
 
 __all__ = [
     "ExtractionError",
+    "FieldError",
     "MD2PydanticError",
     "MDConverter",
+    "PartialResult",
     "__version__",
 ]
 
 from md2pydantic.converter import MDConverter
-from md2pydantic.models import ExtractionError, MD2PydanticError
+from md2pydantic.models import (
+    ExtractionError,
+    FieldError,
+    MD2PydanticError,
+    PartialResult,
+)
