@@ -54,16 +54,6 @@ class TestMDConverterInstantiation:
         converter = MDConverter(SampleModel)
         assert converter.model is SampleModel
 
-    def test_instantiate_with_plain_class(self) -> None:
-        """MDConverter currently accepts type[Any], so a plain class should work."""
-        from md2pydantic import MDConverter
-
-        class PlainClass:
-            pass
-
-        converter = MDConverter(PlainClass)
-        assert converter.model is PlainClass
-
     def test_model_reference_is_not_copied(self) -> None:
         """The stored reference should be the exact same object, not a copy."""
         from md2pydantic import MDConverter
@@ -72,13 +62,17 @@ class TestMDConverterInstantiation:
         assert converter.model is SampleModel
         assert id(converter.model) == id(SampleModel)
 
-    def test_parse_tables_raises_not_implemented(self) -> None:
-        """parse_tables is stubbed and should raise NotImplementedError."""
+    def test_parse_tables_extracts_data(self) -> None:
+        """parse_tables extracts table rows into model instances."""
         from md2pydantic import MDConverter
 
         converter = MDConverter(SampleModel)
-        with pytest.raises(NotImplementedError):
-            converter.parse_tables("| col1 | col2 |\n| --- | --- |\n| a | b |")
+        results = converter.parse_tables(
+            "| name | value |\n| --- | --- |\n| alice | 1 |"
+        )
+        assert len(results) == 1
+        assert results[0].name == "alice"
+        assert results[0].value == 1
 
 
 class TestAllExports:
@@ -97,7 +91,7 @@ class TestAllExports:
     def test_all_has_expected_length(self) -> None:
         import md2pydantic
 
-        assert len(md2pydantic.__all__) == 2
+        assert len(md2pydantic.__all__) == 4
 
     def test_all_entries_are_resolvable(self) -> None:
         """Every name in __all__ should be an actual attribute of the package."""
@@ -136,7 +130,7 @@ class TestModuleImports:
 
         assert isinstance(transformers, types.ModuleType)
 
-    def test_models_exports_mdconverter(self) -> None:
-        from md2pydantic.models import MDConverter
+    def test_converter_module_exports_mdconverter(self) -> None:
+        from md2pydantic.converter import MDConverter
 
         assert MDConverter is not None

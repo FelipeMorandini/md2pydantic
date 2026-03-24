@@ -1,4 +1,4 @@
-"""Internal models and the MDConverter public API entry point."""
+"""Internal models for md2pydantic."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from typing import Any, Generic, TypeVar
 
 from pydantic import BaseModel, ConfigDict
 
-T = TypeVar("T")
+T = TypeVar("T", bound=BaseModel)
 
 
 class BlockType(str, Enum):
@@ -75,17 +75,13 @@ class ValidationResult(BaseModel, Generic[T]):
     raw_input: dict[str, Any]
 
 
-class MDConverter:
-    """Main entry point for md2pydantic.
+class MD2PydanticError(Exception):
+    """Base exception for md2pydantic."""
 
-    Usage::
 
-        result = MDConverter(MyModel).parse_tables(markdown_string)
-    """
+class ExtractionError(MD2PydanticError):
+    """Raised when structured data cannot be extracted or validated."""
 
-    def __init__(self, model: type[Any]) -> None:
-        self.model = model
-
-    def parse_tables(self, markdown: str) -> list[Any]:
-        """Extract tables from markdown and return validated model instances."""
-        raise NotImplementedError
+    def __init__(self, message: str, errors: list[Any] | None = None) -> None:
+        super().__init__(message)
+        self.errors = errors or []

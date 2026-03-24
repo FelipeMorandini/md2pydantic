@@ -8,8 +8,11 @@ except PackageNotFoundError:
     __version__ = "0+unknown"
 
 __all__ = [
+    "ExtractionError",
+    "MD2PydanticError",
     "MDConverter",
     "__version__",
 ]
 
-from md2pydantic.models import MDConverter
+from md2pydantic.converter import MDConverter
+from md2pydantic.models import ExtractionError, MD2PydanticError
